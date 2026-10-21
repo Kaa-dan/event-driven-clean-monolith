@@ -1,5 +1,6 @@
 package com.fleet.storefront.adapter.in.web;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fleet.storefront.adapter.in.web.security.TerminalPrincipal;
 import com.fleet.storefront.application.port.in.BranchInfoQuery;
 import com.fleet.storefront.application.port.in.ManageTerminalsUseCase;
@@ -11,6 +12,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /** The calling device's identity ({@code /me}) and the device registry. */
 @RestController
@@ -31,17 +34,23 @@ class TerminalController {
 
     private final ManageTerminalsUseCase terminals;
     private final BranchInfoQuery branch;
+    private final boolean staffSignInRequired;
 
-    TerminalController(ManageTerminalsUseCase terminals, BranchInfoQuery branch) {
+    TerminalController(ManageTerminalsUseCase terminals, BranchInfoQuery branch,
+                       @Value("${storefront.security.require-staff-session:false}") boolean staffSignInRequired) {
         this.terminals = terminals;
         this.branch = branch;
+        this.staffSignInRequired = staffSignInRequired;
     }
 
     @GetMapping("/me")
     MeResponse me(@AuthenticationPrincipal TerminalPrincipal device) {
         BranchInfoQuery.BranchInfo info = branch.branch();
-        return new MeResponse(device.terminalId().value(), device.name(), device.role().name(),
-                new MeResponse.Branch(info.code(), info.currency().getCurrencyCode(), info.zone().getId()));
+        TerminalPrincipal.Staff staff = device.staff();
+        return new MeResponse(device.terminalId().value(), device.name(), device.deviceRole().name(),
+                new MeResponse.Branch(info.code(), info.currency().getCurrencyCode(), info.zone().getId()),
+                staffSignInRequired, staff == null ? null : new MeResponse.SignedIn(staff.id().value(), staff.username(),
+                        staff.displayName(), staff.role().name(), device.role().name()));
     }
 
     @GetMapping("/terminals")
@@ -66,8 +75,19 @@ class TerminalController {
         return TerminalResponse.from(terminals.revoke(target, device.terminalId()));
     }
 
-    record MeResponse(String terminalId, String name, String role, Branch branch) {
+    /**
+     * @param role                the device's role
+     * @param staffSignInRequired whether a person must sign in before the device can use the API
+     * @param staff               the person signed in on the device with this request's session, if any;
+     *                            {@code effectiveRole} is what they may do here (device role narrowed by their job)
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record MeResponse(String terminalId, String name, String role, Branch branch, boolean staffSignInRequired,
+                      SignedIn staff) {
         record Branch(String code, String currency, String zone) {
+        }
+
+        record SignedIn(UUID id, String username, String displayName, String role, String effectiveRole) {
         }
     }
 

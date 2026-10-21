@@ -11,6 +11,7 @@ import com.fleet.storefront.application.port.out.InventoryLedger;
 import com.fleet.storefront.application.port.out.OrderRepository;
 import com.fleet.storefront.application.port.out.Outbox;
 import com.fleet.storefront.application.port.out.ProductCatalog;
+import com.fleet.storefront.application.port.out.StaffAttribution;
 import com.fleet.storefront.application.port.out.TransactionRunner;
 import com.fleet.storefront.domain.catalog.Product;
 import com.fleet.storefront.domain.catalog.ProductInactiveException;
@@ -62,12 +63,13 @@ public final class PlaceOrderService implements PlaceOrderUseCase {
     private final FiscalSequence fiscalSequence;
     private final OrderRepository orders;
     private final Outbox outbox;
+    private final StaffAttribution attribution;
     private final BranchContext branch;
     private final Clock clock;
 
     public PlaceOrderService(TransactionRunner transactions, IdempotencyStore idempotency, ProductCatalog catalog,
                              InventoryLedger inventory, FiscalSequence fiscalSequence, OrderRepository orders,
-                             Outbox outbox, BranchContext branch, Clock clock) {
+                             Outbox outbox, StaffAttribution attribution, BranchContext branch, Clock clock) {
         this.transactions = transactions;
         this.idempotency = idempotency;
         this.catalog = catalog;
@@ -75,6 +77,7 @@ public final class PlaceOrderService implements PlaceOrderUseCase {
         this.fiscalSequence = fiscalSequence;
         this.orders = orders;
         this.outbox = outbox;
+        this.attribution = attribution;
         this.branch = branch;
         this.clock = clock;
     }
@@ -110,6 +113,9 @@ public final class PlaceOrderService implements PlaceOrderUseCase {
                     order.fiscalHash());
 
             orders.insert(order);
+            if (command.staffId() != null) {
+                attribution.attribute(StaffAttribution.Document.ORDER, order.id().value(), command.staffId());
+            }
             idempotency.complete(command.terminalId(), command.idempotencyKey(), order.id().value());
             order.kitchenTicketRequest().ifPresent(ticket -> outbox.append(new Outbox.Message(
                     Outbox.Destination.KITCHEN, KitchenTicketRequested.TYPE, order.id().value(), ticket)));

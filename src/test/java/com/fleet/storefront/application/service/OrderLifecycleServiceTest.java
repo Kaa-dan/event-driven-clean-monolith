@@ -59,11 +59,11 @@ class OrderLifecycleServiceTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC);
     private final BranchContext branch = new BranchContext("HOSP01", Currency.getInstance("USD"), ZoneId.of("UTC"));
     private final PlaceOrderService checkout = new PlaceOrderService(store, store, store, store, store, store, store,
-            branch, clock);
-    private final PayOrderService pay = new PayOrderService(store, store, store, store, clock);
+            store, branch, clock);
+    private final PayOrderService pay = new PayOrderService(store, store, store, store, store, clock);
     private final CancelOrderService cancel = new CancelOrderService(store, store, store, store, store, clock);
     private final RefundOrderService refund = new RefundOrderService(store, store, store, store, store, store,
-            branch, clock);
+            store, branch, clock);
 
     private final Product water = product("WATER", "2.50", false);
     private final Product burger = product("BURGER", "10.00", true);

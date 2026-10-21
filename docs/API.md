@@ -46,8 +46,45 @@ Change this file in the same PR as any endpoint change.
 ### `GET /api/v1/me` — any role
 ```json
 { "terminalId": "pos-1", "name": "Front counter", "role": "POS",
-  "branch": { "code": "HOSP01", "currency": "USD", "zone": "America/New_York" } }
+  "branch": { "code": "HOSP01", "currency": "USD", "zone": "America/New_York" },
+  "staffSignInRequired": true,
+  "staff": { "id": "…", "username": "carlos", "displayName": "Carlos", "role": "CASHIER",
+             "effectiveRole": "POS" } }
 ```
+`role` is the device's role; `staff` is present only when the request carries a valid `X-Staff-Session`.
+
+## Staff (ADR 0017)
+
+A person signs in on a paired device and then sends `X-Staff-Session: <token>` with the device key on
+every request. The request acts with the device role narrowed by the person's role (`effectiveRole`).
+With `storefront.security.require-staff-session=true` (prod), POS/KITCHEN/MANAGER devices get
+`401 STAFF_SESSION_REQUIRED` without one; an ended, expired or foreign-device session gives
+`401 STAFF_SESSION_INVALID`.
+
+### `GET /api/v1/staff/roster` — `POS`, `KITCHEN`, `MANAGER` → `200 RosterEntry[]`
+Active staff who may sign in on the calling device: `[ { "id", "username", "displayName", "role" } ]`.
+
+### `POST /api/v1/staff-sessions` — `POS`, `KITCHEN`, `MANAGER`
+`{ "username": "carlos", "pin": "1111" }` → `201 { "token": "ss_…", "expiresAt": "…", "staff": RosterEntry,
+"effectiveRole": "POS" }` — the token is shown once; sessions last 12 h and are bound to this device.
+Errors: `401 INVALID_CREDENTIALS` (unknown user, inactive or wrong PIN — indistinguishable),
+`423 STAFF_LOCKED` (5 wrong PINs → 5 min; `lockedUntil`), `403 STAFF_NOT_ALLOWED_ON_DEVICE`.
+
+### `DELETE /api/v1/staff-sessions/current` → `204` (ends the session in `X-Staff-Session`; idempotent)
+
+### `GET /api/v1/staff` — `MANAGER` → `200 StaffMember[]`
+`[ { "id", "username", "displayName", "role", "active", "locked", "createdAt" } ]` — PINs are never returned.
+
+### `POST /api/v1/staff` — `MANAGER`
+`{ "username": "wendy", "displayName": "Wendy", "role": "WAITER", "pin": "2222" }` → `201 StaffMember`.
+Username `[a-z0-9][a-z0-9._-]{1,31}` (lower-cased), PIN 4–8 digits. Errors: `400`, `409 STAFF_EXISTS`.
+
+### `PATCH /api/v1/staff/{id}` — `MANAGER`
+`{ "displayName": "Wendy B.", "role": "WAITER", "active": false }` → `200 StaffMember`. Deactivating or
+changing the role ends the person's sessions. Errors: `404 STAFF_NOT_FOUND`, `409 LAST_STAFF_MANAGER`.
+
+### `POST /api/v1/staff/{id}/pin` — `MANAGER`
+`{ "pin": "5678" }` → `200 StaffMember`: sets the PIN, clears a lockout, ends the person's sessions.
 
 ## Orders
 

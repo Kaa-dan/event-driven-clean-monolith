@@ -6,6 +6,7 @@ import com.fleet.storefront.domain.order.TerminalId;
 import com.fleet.storefront.domain.payment.PaymentMethod;
 import com.fleet.storefront.domain.refund.Refund;
 import com.fleet.storefront.domain.shared.Sha256;
+import com.fleet.storefront.domain.staff.StaffId;
 
 import java.util.Map;
 import java.util.Objects;
@@ -17,10 +18,19 @@ public interface RefundOrderUseCase {
 
     RefundResult refund(RefundOrderCommand command);
 
-    /** @param unitsByLine units to refund per order line number */
+    /**
+     * @param unitsByLine units to refund per order line number
+     * @param staffId     the signed-in person, if any (audit only; not part of the fingerprint)
+     */
     record RefundOrderCommand(TerminalId terminalId, String idempotencyKey, OrderId orderId,
                               SortedMap<Integer, Integer> unitsByLine, boolean restock, PaymentMethod method,
-                              String reason) {
+                              String reason, StaffId staffId) {
+
+        public RefundOrderCommand(TerminalId terminalId, String idempotencyKey, OrderId orderId,
+                                  SortedMap<Integer, Integer> unitsByLine, boolean restock, PaymentMethod method,
+                                  String reason) {
+            this(terminalId, idempotencyKey, orderId, unitsByLine, restock, method, reason, null);
+        }
 
         public RefundOrderCommand {
             Objects.requireNonNull(terminalId, "terminalId");

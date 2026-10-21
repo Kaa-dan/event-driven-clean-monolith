@@ -8,6 +8,7 @@ import com.fleet.storefront.application.port.out.IdempotencyStore;
 import com.fleet.storefront.application.port.out.InventoryLedger;
 import com.fleet.storefront.application.port.out.OrderRepository;
 import com.fleet.storefront.application.port.out.Outbox;
+import com.fleet.storefront.application.port.out.StaffAttribution;
 import com.fleet.storefront.application.port.out.TransactionRunner;
 import com.fleet.storefront.domain.fiscal.FiscalAllocation;
 import com.fleet.storefront.domain.fiscal.FiscalSeries;
@@ -40,18 +41,20 @@ public final class RefundOrderService implements RefundOrderUseCase {
     private final InventoryLedger inventory;
     private final FiscalSequence fiscalSequence;
     private final Outbox outbox;
+    private final StaffAttribution attribution;
     private final BranchContext branch;
     private final Clock clock;
 
     public RefundOrderService(TransactionRunner transactions, IdempotencyStore idempotency, OrderRepository orders,
                               InventoryLedger inventory, FiscalSequence fiscalSequence, Outbox outbox,
-                              BranchContext branch, Clock clock) {
+                              StaffAttribution attribution, BranchContext branch, Clock clock) {
         this.transactions = transactions;
         this.idempotency = idempotency;
         this.orders = orders;
         this.inventory = inventory;
         this.fiscalSequence = fiscalSequence;
         this.outbox = outbox;
+        this.attribution = attribution;
         this.branch = branch;
         this.clock = clock;
     }
@@ -99,6 +102,9 @@ public final class RefundOrderService implements RefundOrderUseCase {
 
             OrderAccount after = account.withRefund(refund);
             orders.insertRefund(refund);
+            if (command.staffId() != null) {
+                attribution.attribute(StaffAttribution.Document.REFUND, refund.id().value(), command.staffId());
+            }
             orders.updateStatus(account.order().id(), after.status(), null);
             idempotency.complete(command.terminalId(), command.idempotencyKey(), refund.id().value());
             outbox.append(new Outbox.Message(Outbox.Destination.HQ, RefundIssued.TYPE, refund.id().value(),

@@ -9,8 +9,11 @@ import com.fleet.storefront.application.port.out.KitchenBoard;
 import com.fleet.storefront.application.port.out.OrderRepository;
 import com.fleet.storefront.application.port.out.Outbox;
 import com.fleet.storefront.application.port.out.OutboxMonitor;
+import com.fleet.storefront.application.port.out.PinHasher;
 import com.fleet.storefront.application.port.out.ProductCatalog;
 import com.fleet.storefront.application.port.out.ReportStore;
+import com.fleet.storefront.application.port.out.StaffAttribution;
+import com.fleet.storefront.application.port.out.StaffDirectory;
 import com.fleet.storefront.application.port.out.TerminalRegistry;
 import com.fleet.storefront.application.port.out.TransactionRunner;
 import com.fleet.storefront.application.service.BranchContext;
@@ -26,6 +29,7 @@ import com.fleet.storefront.application.service.PayOrderService;
 import com.fleet.storefront.application.service.PlaceOrderService;
 import com.fleet.storefront.application.service.RefundOrderService;
 import com.fleet.storefront.application.service.ReportService;
+import com.fleet.storefront.application.service.StaffService;
 import com.fleet.storefront.application.service.TerminalService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -57,15 +61,16 @@ public class StorefrontConfiguration {
     PlaceOrderService placeOrderService(TransactionRunner transactions, IdempotencyStore idempotency,
                                         ProductCatalog catalog, InventoryLedger inventory,
                                         FiscalSequence fiscalSequence, OrderRepository orders, Outbox outbox,
-                                        BranchContext branch, Clock clock) {
+                                        StaffAttribution attribution, BranchContext branch, Clock clock) {
         return new PlaceOrderService(transactions, idempotency, catalog, inventory, fiscalSequence, orders,
-                outbox, branch, clock);
+                outbox, attribution, branch, clock);
     }
 
     @Bean
     PayOrderService payOrderService(TransactionRunner transactions, IdempotencyStore idempotency,
-                                    OrderRepository orders, Outbox outbox, Clock clock) {
-        return new PayOrderService(transactions, idempotency, orders, outbox, clock);
+                                    OrderRepository orders, Outbox outbox, StaffAttribution attribution,
+                                    Clock clock) {
+        return new PayOrderService(transactions, idempotency, orders, outbox, attribution, clock);
     }
 
     @Bean
@@ -78,10 +83,10 @@ public class StorefrontConfiguration {
     @Bean
     RefundOrderService refundOrderService(TransactionRunner transactions, IdempotencyStore idempotency,
                                           OrderRepository orders, InventoryLedger inventory,
-                                          FiscalSequence fiscalSequence, Outbox outbox, BranchContext branch,
-                                          Clock clock) {
-        return new RefundOrderService(transactions, idempotency, orders, inventory, fiscalSequence, outbox, branch,
-                clock);
+                                          FiscalSequence fiscalSequence, Outbox outbox, StaffAttribution attribution,
+                                          BranchContext branch, Clock clock) {
+        return new RefundOrderService(transactions, idempotency, orders, inventory, fiscalSequence, outbox,
+                attribution, branch, clock);
     }
 
     @Bean
@@ -114,6 +119,11 @@ public class StorefrontConfiguration {
     @Bean
     TerminalService terminalService(TerminalRegistry registry, TransactionRunner transactions, Clock clock) {
         return new TerminalService(registry, transactions, clock);
+    }
+
+    @Bean
+    StaffService staffService(StaffDirectory directory, PinHasher pins, TransactionRunner transactions, Clock clock) {
+        return new StaffService(directory, pins, transactions, clock);
     }
 
     @Bean

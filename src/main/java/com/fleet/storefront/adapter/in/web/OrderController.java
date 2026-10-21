@@ -97,7 +97,8 @@ class OrderController {
                 idempotencyKey,
                 request.items().stream()
                         .map(i -> new PlaceOrderCommand.Item(Sku.of(i.sku()), Quantity.of(i.quantity())))
-                        .toList()));
+                        .toList(),
+                device.staffId()));
         PlaceOrderResult result = timed("checkout", () -> placeOrder.placeOrder(command), r -> r.replayed());
         return respond(result.replayed(), HttpStatus.CREATED, OrderResponse.from(result.account()));
     }
@@ -120,7 +121,8 @@ class OrderController {
                                             @RequestHeader(IDEMPOTENCY_KEY) String idempotencyKey,
                                             @PathVariable UUID id, @Valid @RequestBody PaymentRequest request) {
         PayOrderCommand command = Requests.parse(() -> new PayOrderCommand(device.terminalId(), idempotencyKey,
-                new OrderId(id), request.method(), request.amount(), request.tendered(), request.reference()));
+                new OrderId(id), request.method(), request.amount(), request.tendered(), request.reference(),
+                device.staffId()));
         PayOrderUseCase.PaymentResult result = timed("payment", () -> payOrder.pay(command), r -> r.replayed());
         return respond(result.replayed(), HttpStatus.CREATED, new PaymentResponseBody(
                 OrderResponse.PaymentResponse.from(result.payment()), OrderResponse.from(result.account())));
@@ -156,7 +158,7 @@ class OrderController {
             TreeMap<Integer, Integer> units = new TreeMap<>();
             request.lines().forEach(l -> units.merge(l.lineNo(), l.quantity(), Integer::sum));
             return new RefundOrderCommand(device.terminalId(), idempotencyKey, new OrderId(id), units,
-                    request.restock(), request.method(), request.reason());
+                    request.restock(), request.method(), request.reason(), device.staffId());
         });
         RefundOrderUseCase.RefundResult result = timed("refund", () -> refundOrder.refund(command), r -> r.replayed());
         return respond(result.replayed(), HttpStatus.CREATED, new RefundResponseBody(

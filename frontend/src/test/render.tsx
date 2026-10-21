@@ -13,7 +13,9 @@ export function renderAs(
 ) {
   setApiKey(`sf_test_${me.role.toLowerCase()}`);
   return render(
-    <SessionContext.Provider value={{ me, signOut: opts.signOut ?? (() => undefined) }}>
+    <SessionContext.Provider
+      value={{ me, staff: null, role: me.role, signOut: opts.signOut ?? (() => undefined) }}
+    >
       <ReachabilityContext.Provider value={{ state: opts.reach ?? 'up', refresh: () => undefined }}>
         {ui}
       </ReachabilityContext.Provider>

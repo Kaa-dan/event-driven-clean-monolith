@@ -80,8 +80,66 @@ export interface Branch {
 export interface Me {
   terminalId: string;
   name: string;
+  /** The device's own role. */
   role: Role;
   branch: Branch;
+  /** True when a person must sign in (username + PIN) before the device can use the API. */
+  staffSignInRequired?: boolean;
+  /** Present when the request carried a valid staff session. */
+  staff?: SignedInStaff;
+}
+
+// ---------------------------------------------------------------- staff
+
+export type StaffRole = 'CASHIER' | 'WAITER' | 'KITCHEN' | 'MANAGER';
+export const STAFF_ROLES: readonly StaffRole[] = ['CASHIER', 'WAITER', 'KITCHEN', 'MANAGER'];
+
+/** A person who may sign in on this device (GET /staff/roster). */
+export interface RosterEntry {
+  id: string;
+  username: string;
+  displayName: string;
+  role: StaffRole;
+}
+
+export interface SignedInStaff extends RosterEntry {
+  /** What they may do on this device: the device role narrowed by their job. */
+  effectiveRole: Role;
+}
+
+export interface StaffSignInRequest {
+  username: string;
+  pin: string;
+}
+
+export interface StaffSessionResponse {
+  token: string;
+  expiresAt: Instant;
+  staff: RosterEntry;
+  effectiveRole: Role;
+}
+
+export interface StaffMember {
+  id: string;
+  username: string;
+  displayName: string;
+  role: StaffRole;
+  active: boolean;
+  locked: boolean;
+  createdAt: Instant;
+}
+
+export interface CreateStaffRequest {
+  username: string;
+  displayName: string;
+  role: StaffRole;
+  pin: string;
+}
+
+export interface UpdateStaffRequest {
+  displayName: string;
+  role: StaffRole;
+  active: boolean;
 }
 
 // ---------------------------------------------------------------- orders

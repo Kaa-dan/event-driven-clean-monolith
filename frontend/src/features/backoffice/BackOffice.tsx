@@ -9,12 +9,14 @@ import { OperationsSection } from './operations/OperationsSection';
 import { OrderDetail } from './orders/OrderDetail';
 import { OrdersSection } from './orders/OrdersSection';
 import { ReportsSection } from './reports/ReportsSection';
+import { StaffSection } from './staff/StaffSection';
 
 const LABELS: Record<BackOfficeSection, MessageKey> = {
   orders: 'bo.orders',
   catalog: 'bo.catalog',
   inventory: 'bo.inventory',
   devices: 'bo.devices',
+  staff: 'bo.staff',
   operations: 'bo.operations',
   reports: 'bo.reports',
 };
@@ -43,6 +45,7 @@ export function BackOffice({ section, id }: { section: BackOfficeSection; id: st
       {section === 'catalog' ? <CatalogSection /> : null}
       {section === 'inventory' ? <InventorySection /> : null}
       {section === 'devices' ? <DevicesSection /> : null}
+      {section === 'staff' ? <StaffSection /> : null}
       {section === 'operations' ? <OperationsSection /> : null}
       {section === 'reports' ? <ReportsSection /> : null}
     </div>

@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { onUnauthorized, setApiKey } from '../api/client';
-import { getMe } from '../api/endpoints';
+import { onStaffUnauthorized, onUnauthorized, setApiKey, setStaffToken } from '../api/client';
+import { getMe, staffSignOut } from '../api/endpoints';
 import { appsForRole, formatRoute, resolveRoute, type AppId, type Route } from '../domain/routes';
-import { decodeSession, encodeSession, isMe, type DeviceSession } from '../domain/session';
+import {
+  decodeSession,
+  effectiveRole,
+  encodeSession,
+  isMe,
+  needsStaffSignIn,
+  type DeviceSession,
+  type StaffSession,
+} from '../domain/session';
 import { DemoConnect } from '../features/auth/DemoConnect';
 import { SignIn } from '../features/auth/SignIn';
+import { initials } from '../domain/staff';
+import { StaffSignIn } from '../features/auth/StaffSignIn';
 import { BackOffice } from '../features/backoffice/BackOffice';
 import { go } from '../features/common/nav';
 import { DevTools } from '../features/devtools/DevTools';
@@ -43,6 +53,7 @@ function loadSession(): DeviceSession | null {
   const s = demoKey && stored?.apiKey !== demoKey ? null : stored;
   // Set synchronously so that the first requests of child components are authenticated.
   setApiKey(s?.apiKey ?? null);
+  setStaffToken(s?.staff?.token ?? null);
   return s;
 }
 
@@ -58,22 +69,61 @@ function Root() {
   const demoKey = demoApiKey();
   const [session, setSession] = useState<DeviceSession | null>(loadSession);
   const [signedOutReason, setSignedOutReason] = useState<string | null>(null);
+  /** Staff sign-in screen requested ("Switch user") or forced (session ended). */
+  const [staffScreen, setStaffScreen] = useState(false);
+  const [staffReason, setStaffReason] = useState<string | null>(null);
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
-  const signIn = useCallback((s: DeviceSession) => {
-    setApiKey(s.apiKey);
+  const store = useCallback((s: DeviceSession) => {
     saveString(STORAGE_KEYS.session, encodeSession(s));
-    setSignedOutReason(null);
     setSession(s);
   }, []);
 
+  const signIn = useCallback(
+    (s: DeviceSession) => {
+      setApiKey(s.apiKey);
+      setStaffToken(s.staff?.token ?? null);
+      setSignedOutReason(null);
+      store(s);
+    },
+    [store],
+  );
+
   const signOut = useCallback((reason: string | null = null) => {
     setApiKey(null);
+    setStaffToken(null);
     removeKey(STORAGE_KEYS.session);
     setSignedOutReason(reason);
+    setStaffScreen(false);
     setSession(null);
   }, []);
+
+  const signInStaff = useCallback(
+    (staff: StaffSession) => {
+      const current = sessionRef.current;
+      if (!current) return;
+      setStaffToken(staff.token);
+      setStaffReason(null);
+      setStaffScreen(false);
+      store({ ...current, staff });
+    },
+    [store],
+  );
+
+  /** Ends the person's session; the device stays paired and shows the staff sign-in screen. */
+  const signOutStaff = useCallback(
+    (reason: string | null, tellServer: boolean) => {
+      const current = sessionRef.current;
+      if (!current) return;
+      if (tellServer && current.staff) void staffSignOut();
+      setStaffToken(null);
+      store({ apiKey: current.apiKey, me: current.me, verifiedAt: current.verifiedAt });
+      setStaffReason(reason);
+      setStaffScreen(true);
+    },
+    [store],
+  );
 
   // A 401 anywhere means the key is unknown or was revoked: back to sign-in.
   useEffect(
@@ -84,6 +134,15 @@ function Root() {
     [signOut],
   );
 
+  // The person's session ended (expired, signed out elsewhere, PIN reset): back to the PIN pad.
+  useEffect(
+    () =>
+      onStaffUnauthorized(() => {
+        if (sessionRef.current) signOutStaff(t('staff.expired'), false);
+      }),
+    [signOutStaff],
+  );
+
   // Re-validate the stored identity in the background (role may have changed). Offline-first:
   // when the node is unreachable the stored identity keeps working.
   const apiKey = session?.apiKey ?? null;
@@ -92,14 +151,19 @@ function Root() {
     let cancelled = false;
     void getMe().then((r) => {
       if (cancelled || !r.ok || !isMe(r.data)) return;
-      const next: DeviceSession = { apiKey, me: r.data, verifiedAt: Date.now() };
-      saveString(STORAGE_KEYS.session, encodeSession(next));
-      setSession(next);
+      const staff = sessionRef.current?.staff;
+      const next: DeviceSession = {
+        apiKey,
+        me: r.data,
+        verifiedAt: Date.now(),
+        ...(staff ? { staff } : {}),
+      };
+      store(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [apiKey]);
+  }, [apiKey, store]);
 
   // Demo mode: connect by itself and open on the scenario tests.
   const signInDemo = useCallback(
@@ -117,7 +181,22 @@ function Root() {
       <SignIn onSignedIn={signIn} reason={signedOutReason} />
     );
   }
-  return <Shell session={session} onSignOut={demoKey ? null : () => signOut(null)} />;
+  const unpair = demoKey ? null : () => signOut(null);
+  const staffRequired = needsStaffSignIn(session, Date.now());
+  if (staffRequired || staffScreen) {
+    return (
+      <StaffSignIn
+        me={session.me}
+        reason={staffReason}
+        onSignedIn={signInStaff}
+        onCancel={staffRequired ? null : () => setStaffScreen(false)}
+        onUnpair={unpair ?? (() => setStaffScreen(false))}
+      />
+    );
+  }
+  return (
+    <Shell session={session} onSignOut={unpair} onSwitchUser={() => signOutStaff(null, true)} />
+  );
 }
 
 function useHash(): string {
@@ -133,18 +212,26 @@ function useHash(): string {
 function Shell({
   session,
   onSignOut,
+  onSwitchUser,
 }: {
   session: DeviceSession;
   /** null in demo mode: there is nothing to sign out of. */
   onSignOut: (() => void) | null;
+  /** Ends the person's session and shows the staff sign-in screen. */
+  onSwitchUser: () => void;
 }) {
   const { me } = session;
+  const staff = session.staff?.staff ?? null;
+  const role = effectiveRole(session);
   const reach = useReachabilityPoller();
   const hash = useHash();
-  const route = resolveRoute(hash, me.role);
-  const apps = appsForRole(me.role);
+  const route = resolveRoute(hash, role);
+  const apps = appsForRole(role);
   const mainRef = useRef<HTMLElement>(null);
-  const sessionValue = useMemo(() => ({ me, signOut: onSignOut ?? (() => {}) }), [me, onSignOut]);
+  const sessionValue = useMemo(
+    () => ({ me, staff, role, signOut: onSignOut ?? (() => {}) }),
+    [me, staff, role, onSignOut],
+  );
 
   // Keep the URL in sync with the route actually shown (e.g. a POS device opening #/backoffice).
   const canonical = route ? formatRoute(route) : null;
@@ -202,7 +289,18 @@ function Shell({
               <div className="tabs" />
             )}
             <div className="header-status">
-              <Badge tone="info">{t(`role.${me.role}`)}</Badge>
+              {staff ? (
+                <span className="staff-chip" data-testid="signed-in-staff">
+                  <span className="staff-avatar staff-avatar-sm" aria-hidden="true">
+                    {initials(staff.displayName)}
+                  </span>
+                  <span>{staff.displayName}</span>
+                </span>
+              ) : null}
+              <button type="button" onClick={onSwitchUser}>
+                {staff ? t('staff.switchUser') : t('staff.signIn')}
+              </button>
+              <Badge tone="info">{t(`role.${role}`)}</Badge>
               <span aria-live="polite" title={t('reach.title')}>
                 <Badge tone={r.tone}>{t(r.label)}</Badge>
               </span>

@@ -14,6 +14,7 @@ import com.fleet.storefront.domain.money.TaxRate;
 import com.fleet.storefront.domain.order.Quantity;
 import com.fleet.storefront.domain.order.TerminalId;
 import com.fleet.storefront.domain.shared.UuidV7;
+import com.fleet.storefront.domain.staff.StaffId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -33,7 +34,7 @@ class PlaceOrderServiceTest {
 
     private final InMemoryStorefront store = new InMemoryStorefront();
     private final PlaceOrderService service = new PlaceOrderService(store, store, store, store, store, store, store,
-            new BranchContext("HOSP01", Currency.getInstance("USD"), ZoneId.of("UTC")),
+            store, new BranchContext("HOSP01", Currency.getInstance("USD"), ZoneId.of("UTC")),
             Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC));
 
     private final Product water = product("WATER", false);
@@ -54,6 +55,24 @@ class PlaceOrderServiceTest {
         assertThat(store.stockOf(burger)).isEqualTo(4);
         assertThat(store.state.outbox()).extracting(Outbox.Message::destination)
                 .containsExactly(Outbox.Destination.KITCHEN, Outbox.Destination.HQ);
+    }
+
+    @Test
+    void theSignedInPersonIsRecordedOnTheOrder_onceAndNotOnReplay() {
+        StaffId ana = new StaffId(UuidV7.next());
+        PlaceOrderCommand first = new PlaceOrderCommand(new TerminalId("pos-1"), "k1", List.of(item("WATER", 1)), ana);
+
+        PlaceOrderResult placed = service.placeOrder(first);
+        assertThat(store.attributions).containsEntry(placed.order().id().value(), ana);
+        assertThat(store.calls).containsOnlyOnce("attribute:ORDER");
+
+        // A retry by another person (same device, same key) replays the original order unchanged.
+        StaffId ben = new StaffId(UuidV7.next());
+        PlaceOrderResult replay = service.placeOrder(
+                new PlaceOrderCommand(new TerminalId("pos-1"), "k1", List.of(item("WATER", 1)), ben));
+        assertThat(replay.replayed()).isTrue();
+        assertThat(store.attributions).containsEntry(placed.order().id().value(), ana);
+        assertThat(store.calls).containsOnlyOnce("attribute:ORDER");
     }
 
     /** CONTRIBUTING.md invariants 2–5: idempotency key → stock (by product id) → fiscal counter → writes → outbox. */

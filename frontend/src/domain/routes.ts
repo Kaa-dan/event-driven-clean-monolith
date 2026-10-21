@@ -12,6 +12,7 @@ export type BackOfficeSection =
   | 'catalog'
   | 'inventory'
   | 'devices'
+  | 'staff'
   | 'operations'
   | 'reports';
 export const BACK_OFFICE_SECTIONS: readonly BackOfficeSection[] = [
@@ -19,6 +20,7 @@ export const BACK_OFFICE_SECTIONS: readonly BackOfficeSection[] = [
   'catalog',
   'inventory',
   'devices',
+  'staff',
   'operations',
   'reports',
 ];

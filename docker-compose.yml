@@ -26,6 +26,8 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: demo
+      # true = people must sign in with username + PIN on every device (as in production)
+      STOREFRONT_REQUIRE_STAFF_SESSION: ${STOREFRONT_REQUIRE_STAFF_SESSION:-false}
       STOREFRONT_DB_URL: jdbc:postgresql://db:5432/storefront
     ports:
       - "${BACKEND_PORT:-8080}:8080"

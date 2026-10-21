@@ -26,6 +26,15 @@ Option 1).
 Option 2 uses a local JDK 21 if there is one; otherwise it runs Maven in Docker, which works on Linux only,
 so on macOS without a JDK use Option 1. On Windows use Option 1 (or Option 2 inside WSL).
 
+### Staff sign-in (restaurant mode)
+
+Prefix either command with `STOREFRONT_REQUIRE_STAFF_SESSION=true` to run like production: every device
+asks **who is working** and their PIN after pairing (ADR 0017). Pair with a demo device key
+(`sf_demo_manager`, `sf_demo_pos`, `sf_demo_kitchen`; in demo mode the UI pairs by itself), then sign in as
+**maria** 1234 (manager), **carlos** 1111 (cashier), **wendy** 2222 (waiter) or **kofi** 3333 (kitchen).
+A cashier on the back-office PC only gets the POS; *Switch user* hands the device to the next person.
+Managers add staff in *Back office → Staff*. Demo data only — never use these PINs in production.
+
 ## What to try
 
 The **Scenario tests** page lists these with buttons that open the right screen.

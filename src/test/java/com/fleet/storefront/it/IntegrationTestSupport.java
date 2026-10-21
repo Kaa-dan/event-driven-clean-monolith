@@ -53,7 +53,8 @@ public abstract class IntegrationTestSupport {
     void cleanDatabase() {
         jdbc.sql("""
                 TRUNCATE kitchen_ticket, outbox_event, idempotency_key, refund_line, refund, payment, order_line,
-                         customer_order, fiscal_sequence, stock_movement, inventory, product, terminal, sync_state
+                         customer_order, fiscal_sequence, stock_movement, inventory, product, terminal, sync_state,
+                         staff_session, staff
                 """).update();
         givenDevice("it-manager", Role.MANAGER, MANAGER_KEY);
         givenDevice("kiosk-1", Role.POS, POS_KEY);

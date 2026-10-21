@@ -27,8 +27,10 @@ STOREFRONT_BOOTSTRAP_MANAGER_KEY=$(openssl rand -base64 33) ; echo "$STOREFRONT_
 STOREFRONT_IMAGE=storefront-edge-node:1.0.0 STOREFRONT_UI_IMAGE=storefront-ui:1.0.0 docker compose up -d
 ```
 
-Then on a back-office browser: open `https://<node>/`, sign in with the bootstrap key, **Back office →
-Devices**: register a named manager device, one device per POS/kiosk/KDS screen (each key is shown once —
+Then on a back-office browser: open `https://<node>/`, pair it with the bootstrap key and sign in as the
+bootstrap manager person (`STOREFRONT_BOOTSTRAP_MANAGER_USERNAME` / `_PIN`; staff sign-in is required in
+the `prod` profile, ADR 0017). **Back office → Staff**: add every person with their job and a PIN, and
+reset the bootstrap manager's PIN. **Back office → Devices**: register a named manager device, one device per POS/kiosk/KDS screen (each key is shown once —
 enter it on the device), and a `MONITOR` device for the metrics scraper. Revoke `manager-bootstrap` and
 remove `STOREFRONT_BOOTSTRAP_MANAGER_KEY` from `.env`. A lost/stolen device: revoke it; its key stops working
 immediately (open kitchen streams end within 30 min).
@@ -44,6 +46,8 @@ The `prod` profile refuses to start without database, branch and node settings �
 | `STOREFRONT_DB_URL`, `_USER`, `_PASSWORD` | Database |
 | `STOREFRONT_HQ_URL`, `STOREFRONT_HQ_API_KEY` | Central HQ; empty = offline mode (events queue in the outbox) |
 | `STOREFRONT_BOOTSTRAP_MANAGER_KEY` | First start only (≥ 32 chars) |
+| `STOREFRONT_BOOTSTRAP_MANAGER_USERNAME`, `_PIN` | First start only: the first manager person |
+| `STOREFRONT_REQUIRE_STAFF_SESSION` | People must sign in with username + PIN on UI devices (default `true` in `prod`) |
 
 Tunables (`application.yml`, override with env `STOREFRONT_…`): checkout `lock-timeout` (3 s), Hikari pool
 (20), outbox poll (200 ms), retention (7 days), KDS stream poll (1 s).

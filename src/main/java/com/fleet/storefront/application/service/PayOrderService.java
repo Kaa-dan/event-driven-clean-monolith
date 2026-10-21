@@ -7,6 +7,7 @@ import com.fleet.storefront.application.port.in.VoidPaymentUseCase;
 import com.fleet.storefront.application.port.out.IdempotencyStore;
 import com.fleet.storefront.application.port.out.OrderRepository;
 import com.fleet.storefront.application.port.out.Outbox;
+import com.fleet.storefront.application.port.out.StaffAttribution;
 import com.fleet.storefront.application.port.out.TransactionRunner;
 import com.fleet.storefront.domain.order.OrderAccount;
 import com.fleet.storefront.domain.order.event.PaymentRecorded;
@@ -29,14 +30,16 @@ public final class PayOrderService implements PayOrderUseCase, VoidPaymentUseCas
     private final IdempotencyStore idempotency;
     private final OrderRepository orders;
     private final Outbox outbox;
+    private final StaffAttribution attribution;
     private final Clock clock;
 
     public PayOrderService(TransactionRunner transactions, IdempotencyStore idempotency, OrderRepository orders,
-                           Outbox outbox, Clock clock) {
+                           Outbox outbox, StaffAttribution attribution, Clock clock) {
         this.transactions = transactions;
         this.idempotency = idempotency;
         this.orders = orders;
         this.outbox = outbox;
+        this.attribution = attribution;
         this.clock = clock;
     }
 
@@ -70,6 +73,9 @@ public final class PayOrderService implements PayOrderUseCase, VoidPaymentUseCas
             OrderAccount after = account.withPayment(payment);
 
             orders.insertPayment(payment);
+            if (command.staffId() != null) {
+                attribution.attribute(StaffAttribution.Document.PAYMENT, payment.id().value(), command.staffId());
+            }
             if (after.status() != account.status()) {
                 orders.updateStatus(account.order().id(), after.status(), null);
             }

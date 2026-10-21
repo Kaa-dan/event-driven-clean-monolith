@@ -26,11 +26,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     private static final Set<String> NOT_FOUND = Set.of(
-            "ORDER_NOT_FOUND", "TICKET_NOT_FOUND", "TERMINAL_NOT_FOUND", "DEAD_LETTER_NOT_FOUND", "PAYMENT_NOT_FOUND");
+            "ORDER_NOT_FOUND", "TICKET_NOT_FOUND", "TERMINAL_NOT_FOUND", "DEAD_LETTER_NOT_FOUND", "PAYMENT_NOT_FOUND",
+            "STAFF_NOT_FOUND");
     private static final Set<String> CONFLICT = Set.of(
             "OUT_OF_STOCK", "ORDER_NOT_PAYABLE", "ORDER_NOT_CANCELLABLE", "ORDER_NOT_REFUNDABLE",
             "TICKET_STATE_CONFLICT", "VERSION_CONFLICT", "PRODUCT_EXISTS", "TERMINAL_EXISTS", "CANNOT_REVOKE_SELF",
-            "PAYMENT_ALREADY_VOIDED", "LAST_MANAGER");
+            "PAYMENT_ALREADY_VOIDED", "LAST_MANAGER", "STAFF_EXISTS", "LAST_STAFF_MANAGER");
 
     /** Business rule violated: 404 / 409 / 400 / 422 by stable code; extra facts become problem properties. */
     @ExceptionHandler(DomainException.class)
@@ -86,6 +87,15 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private static HttpStatus statusOf(String code) {
+        if ("INVALID_CREDENTIALS".equals(code)) {
+            return HttpStatus.UNAUTHORIZED;
+        }
+        if ("STAFF_LOCKED".equals(code)) {
+            return HttpStatus.LOCKED;
+        }
+        if ("STAFF_NOT_ALLOWED_ON_DEVICE".equals(code)) {
+            return HttpStatus.FORBIDDEN;
+        }
         if (NOT_FOUND.contains(code)) {
             return HttpStatus.NOT_FOUND;
         }

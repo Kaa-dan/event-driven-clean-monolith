@@ -7,6 +7,7 @@ import com.fleet.storefront.application.port.out.InventoryLedger;
 import com.fleet.storefront.application.port.out.OrderRepository;
 import com.fleet.storefront.application.port.out.Outbox;
 import com.fleet.storefront.application.port.out.ProductCatalog;
+import com.fleet.storefront.application.port.out.StaffAttribution;
 import com.fleet.storefront.application.port.out.TransactionRunner;
 import com.fleet.storefront.application.readmodel.StockMovementView;
 import com.fleet.storefront.domain.catalog.Product;
@@ -26,6 +27,7 @@ import com.fleet.storefront.domain.order.TerminalId;
 import com.fleet.storefront.domain.payment.Payment;
 import com.fleet.storefront.domain.refund.Refund;
 import com.fleet.storefront.domain.shared.UuidV7;
+import com.fleet.storefront.domain.staff.StaffId;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,7 +47,7 @@ import java.util.function.Supplier;
  * that would take a lock or write is appended to {@link #calls}, so tests can assert the lock order.
  */
 final class InMemoryStorefront implements TransactionRunner, IdempotencyStore, ProductCatalog, InventoryLedger,
-        FiscalSequence, OrderRepository, Outbox, HqCatalogFeed {
+        FiscalSequence, OrderRepository, Outbox, HqCatalogFeed, StaffAttribution {
 
     record Counter(long value, Instant issuedAt, String hash, Long firstHashed) {
     }
@@ -70,6 +72,8 @@ final class InMemoryStorefront implements TransactionRunner, IdempotencyStore, P
     /** Port calls in invocation order, e.g. {@code "claim"}, {@code "take:WATER"}, {@code "fiscal:ORD"}. Never rolled back. */
     final List<String> calls = new ArrayList<>();
     final List<Product> hqFeed = new ArrayList<>();
+    /** Document id → the person it was attributed to. Never rolled back (like {@link #calls}). */
+    final Map<UUID, StaffId> attributions = new HashMap<>();
     long hqWatermark;
     State state = new State(new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(),
             new HashMap<>(), new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new HashMap<>());
@@ -371,5 +375,13 @@ final class InMemoryStorefront implements TransactionRunner, IdempotencyStore, P
     public void append(Message message) {
         calls.add("outbox:" + message.destination());
         state.outbox().add(message);
+    }
+
+    // --- StaffAttribution ---------------------------------------------------------------------
+
+    @Override
+    public void attribute(Document document, UUID id, StaffId staff) {
+        calls.add("attribute:" + document);
+        attributions.put(id, staff);
     }
 }

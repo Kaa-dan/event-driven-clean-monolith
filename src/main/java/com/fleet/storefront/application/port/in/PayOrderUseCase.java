@@ -6,6 +6,7 @@ import com.fleet.storefront.domain.order.TerminalId;
 import com.fleet.storefront.domain.payment.Payment;
 import com.fleet.storefront.domain.payment.PaymentMethod;
 import com.fleet.storefront.domain.shared.Sha256;
+import com.fleet.storefront.domain.staff.StaffId;
 
 import java.math.BigDecimal;
 import java.util.Objects;
@@ -18,9 +19,15 @@ public interface PayOrderUseCase {
     /**
      * @param tendered  cash handed over; required for CASH, absent for CARD
      * @param reference card approval code; required for CARD, absent for CASH
+     * @param staffId   the signed-in person, if any (audit only; not part of the fingerprint)
      */
     record PayOrderCommand(TerminalId terminalId, String idempotencyKey, OrderId orderId, PaymentMethod method,
-                           BigDecimal amount, BigDecimal tendered, String reference) {
+                           BigDecimal amount, BigDecimal tendered, String reference, StaffId staffId) {
+
+        public PayOrderCommand(TerminalId terminalId, String idempotencyKey, OrderId orderId, PaymentMethod method,
+                               BigDecimal amount, BigDecimal tendered, String reference) {
+            this(terminalId, idempotencyKey, orderId, method, amount, tendered, reference, null);
+        }
 
         public PayOrderCommand {
             Objects.requireNonNull(terminalId, "terminalId");

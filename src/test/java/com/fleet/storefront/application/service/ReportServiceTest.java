@@ -31,7 +31,7 @@ class ReportServiceTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-13T12:00:00Z"), ZoneOffset.UTC);
     private final BranchContext branch = new BranchContext("HOSP01", Currency.getInstance("USD"), ZoneId.of("UTC"));
     private final PlaceOrderService checkout = new PlaceOrderService(store, store, store, store, store, store, store,
-            branch, clock);
+            store, branch, clock);
     private final ReportService reports = new ReportService(null, store, store, branch, clock);
 
     ReportServiceTest() {

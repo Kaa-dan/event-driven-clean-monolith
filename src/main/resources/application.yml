@@ -62,6 +62,11 @@ storefront:
     stream-max-age: 30m
   security:
     bootstrap-manager-key: ${STOREFRONT_BOOTSTRAP_MANAGER_KEY:}
+    bootstrap-manager-username: ${STOREFRONT_BOOTSTRAP_MANAGER_USERNAME:}
+    bootstrap-manager-pin: ${STOREFRONT_BOOTSTRAP_MANAGER_PIN:}
+    # When true, POS/KITCHEN/MANAGER devices also need a signed-in person (X-Staff-Session) for the API.
+    # Off by default so machine clients, tests and the scenario console work with a device key alone.
+    require-staff-session: ${STOREFRONT_REQUIRE_STAFF_SESSION:false}
 
 management:
   endpoints:

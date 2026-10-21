@@ -1,8 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { Me } from '../api/types';
+import type { Me, Role, RosterEntry } from '../api/types';
 
 export interface SessionValue {
   me: Me;
+  /** The person signed in on the device, if any. */
+  staff: RosterEntry | null;
+  /** What the UI may offer: the person's effective role, or the device role when nobody is signed in. */
+  role: Role;
   signOut: () => void;
 }
 

@@ -127,6 +127,115 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Pair this device' })).not.toBeInTheDocument();
   });
 
+  describe('staff sign-in (ADR 0017)', () => {
+    const roster = [
+      { id: 's1', username: 'carl', displayName: 'Carl Mendes', role: 'CASHIER' },
+      { id: 's2', username: 'maria', displayName: 'Maria', role: 'MANAGER' },
+    ];
+    const staffRoutes = (identity: Me) =>
+      fakeServer([
+        ['GET', '/api/v1/me', () => json(200, identity)],
+        ['GET', '/api/v1/staff/roster', () => json(200, roster)],
+        [
+          'POST',
+          '/api/v1/staff-sessions',
+          (req) => {
+            const body = req.body as { username: string; pin: string };
+            if (body.pin !== '1111') return problem(401, 'INVALID_CREDENTIALS');
+            return json(201, {
+              token: 'ss_carl',
+              expiresAt: '2999-01-01T00:00:00Z',
+              staff: roster[0],
+              effectiveRole: 'POS',
+            });
+          },
+        ],
+        ['DELETE', '/api/v1/staff-sessions/current', () => new Response(null, { status: 204 })],
+        ['GET', '/api/v1/catalog', () => json(200, catalog)],
+        ['GET', '/api/v1/orders', () => json(200, [])],
+      ]);
+
+    it('asks who is working, checks the PIN, then narrows the apps to the person', async () => {
+      const identity = { ...me('MANAGER'), staffSignInRequired: true };
+      store(identity);
+      const server = staffRoutes(identity);
+      vi.stubGlobal('fetch', server.fetch);
+      const user = userEvent.setup();
+      render(<App />);
+
+      expect(await screen.findByRole('heading', { name: 'Who is working?' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Continue without signing in' })).toBeNull();
+      await user.click(await screen.findByRole('button', { name: /Carl Mendes/ }));
+      expect(
+        screen.getByRole('heading', { name: 'Hi Carl Mendes, enter your PIN' }),
+      ).toBeInTheDocument();
+
+      for (const d of ['0', '0', '0', '0'])
+        await user.click(screen.getByRole('button', { name: d }));
+      await user.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(await screen.findByText('Wrong PIN. Try again.')).toBeInTheDocument();
+
+      await user.keyboard('1111{Enter}');
+      expect(await screen.findByTestId('signed-in-staff')).toHaveTextContent('Carl Mendes');
+      // A cashier on the back-office device only gets the POS.
+      expect(screen.queryByRole('navigation', { name: 'Apps' })).not.toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Add Classic burger' })).toBeInTheDocument();
+      const catalogReq = server.calls('GET', '/api/v1/catalog').at(-1);
+      expect(catalogReq?.headers['X-Staff-Session']).toBe('ss_carl');
+
+      await user.click(screen.getByRole('button', { name: 'Switch user' }));
+      expect(await screen.findByRole('heading', { name: 'Who is working?' })).toBeInTheDocument();
+      await waitFor(() =>
+        expect(server.calls('DELETE', '/api/v1/staff-sessions/current')).toHaveLength(1),
+      );
+      expect(JSON.parse(localStorage.getItem('edge.session') ?? '{}')).not.toHaveProperty('staff');
+    });
+
+    it('goes back to the PIN pad, not to pairing, when the person is signed out by the server', async () => {
+      const identity = { ...me('POS'), staffSignInRequired: true };
+      localStorage.setItem(
+        'edge.session',
+        encodeSession({
+          apiKey: 'sf_stored',
+          me: identity,
+          verifiedAt: 1,
+          staff: {
+            token: 'ss_old',
+            expiresAt: '2999-01-01T00:00:00Z',
+            staff: { id: 's1', username: 'carl', displayName: 'Carl', role: 'CASHIER' },
+            effectiveRole: 'POS',
+          },
+        }),
+      );
+      vi.stubGlobal(
+        'fetch',
+        fakeServer([
+          ['GET', '/api/v1/me', () => problem(401, 'STAFF_SESSION_INVALID')],
+          ['GET', '/api/v1/staff/roster', () => json(200, roster)],
+          ['GET', '/api/v1/catalog', () => problem(401, 'STAFF_SESSION_INVALID')],
+        ]).fetch,
+      );
+      render(<App />);
+      expect(
+        await screen.findByText('You were signed out. Sign in again to continue.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Who is working?' })).toBeInTheDocument();
+      expect(JSON.parse(localStorage.getItem('edge.session') ?? '{}')).toMatchObject({
+        apiKey: 'sf_stored',
+      });
+    });
+
+    it('lets a person sign in optionally when the node does not require it', async () => {
+      store(me('POS'));
+      vi.stubGlobal('fetch', staffRoutes(me('POS')).fetch);
+      const user = userEvent.setup();
+      render(<App />);
+      await user.click(await screen.findByRole('button', { name: 'Staff sign-in' }));
+      await user.click(screen.getByRole('button', { name: 'Continue without signing in' }));
+      expect(await screen.findByRole('button', { name: 'Add Classic burger' })).toBeInTheDocument();
+    });
+  });
+
   describe('demo mode (VITE_DEMO_API_KEY)', () => {
     it('signs in by itself, without a sign-out button, and opens the scenario tests', async () => {
       vi.stubEnv('VITE_DEMO_API_KEY', 'sf_demo_manager');

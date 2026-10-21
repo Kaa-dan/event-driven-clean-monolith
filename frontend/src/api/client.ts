@@ -30,7 +30,7 @@ export interface ApiFailure {
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
   body?: unknown;
   signal?: AbortSignal;
@@ -43,7 +43,17 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 // ---------------------------------------------------------------- credentials
 
 let apiKey: string | null = null;
+let staffToken: string | null = null;
 const unauthorizedListeners = new Set<() => void>();
+const staffUnauthorizedListeners = new Set<() => void>();
+
+/** 401 codes that mean the *person's* session is gone; the device itself stays paired. */
+export const STAFF_SESSION_CODES: readonly string[] = [
+  'STAFF_SESSION_INVALID',
+  'STAFF_SESSION_REQUIRED',
+];
+/** A wrong PIN is a 401 too, but signs nobody out. */
+const INVALID_CREDENTIALS = 'INVALID_CREDENTIALS';
 
 /** Set (or clear) the paired device's API key sent as `Authorization: Bearer <key>`. */
 export function setApiKey(key: string | null): void {
@@ -52,6 +62,25 @@ export function setApiKey(key: string | null): void {
 
 export function getApiKey(): string | null {
   return apiKey;
+}
+
+/** Set (or clear) the signed-in person's session token sent as `X-Staff-Session`. */
+export function setStaffToken(token: string | null): void {
+  staffToken = token;
+}
+
+export function getStaffToken(): string | null {
+  return staffToken;
+}
+
+/** Called when a request is refused because the person's session ended or is missing. */
+export function onStaffUnauthorized(listener: () => void): () => void {
+  staffUnauthorizedListeners.add(listener);
+  return () => staffUnauthorizedListeners.delete(listener);
+}
+
+export function notifyStaffUnauthorized(): void {
+  for (const l of [...staffUnauthorizedListeners]) l();
 }
 
 /** Called whenever any request gets a 401 (unknown / revoked key). Returns an unsubscribe fn. */
@@ -64,9 +93,16 @@ export function notifyUnauthorized(): void {
   for (const l of [...unauthorizedListeners]) l();
 }
 
-/** Headers every API call carries (Authorization when paired). */
-export function authHeaders(key: string | null = apiKey): Record<string, string> {
-  return key ? { Authorization: `Bearer ${key}` } : {};
+/**
+ * Headers every API call carries: Authorization when paired, X-Staff-Session when a person is signed
+ * in. Passing an explicit key (validating a candidate key) sends that key alone.
+ */
+export function authHeaders(key?: string | null): Record<string, string> {
+  if (key !== undefined) return key ? { Authorization: `Bearer ${key}` } : {};
+  return {
+    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    ...(apiKey && staffToken ? { 'X-Staff-Session': staffToken } : {}),
+  };
 }
 
 // ---------------------------------------------------------------- helpers
@@ -212,14 +248,15 @@ export async function request<T>(
   if (res.ok) {
     return { ok: true, status: res.status, headers: res.headers, data: body as T, elapsedMs };
   }
-  if (res.status === 401) notifyUnauthorized();
-  return {
-    ok: false,
-    status: res.status,
-    headers: res.headers,
-    problem: toProblem(res.status, body, res.statusText || `HTTP ${res.status}`),
-    elapsedMs,
-  };
+  const problem = toProblem(res.status, body, res.statusText || `HTTP ${res.status}`);
+  if (res.status === 401) {
+    if (typeof problem.code === 'string' && STAFF_SESSION_CODES.includes(problem.code)) {
+      notifyStaffUnauthorized();
+    } else if (problem.code !== INVALID_CREDENTIALS) {
+      notifyUnauthorized();
+    }
+  }
+  return { ok: false, status: res.status, headers: res.headers, problem, elapsedMs };
 }
 
 /** True when the failure means no HTTP response arrived (unreachable or timeout). */

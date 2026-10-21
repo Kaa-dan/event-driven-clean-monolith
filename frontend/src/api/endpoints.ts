@@ -5,6 +5,7 @@ import type {
   CatalogItem,
   CheckoutRequest,
   CreateProductRequest,
+  CreateStaffRequest,
   DailyReport,
   DeadLetter,
   FiscalChainReport,
@@ -22,6 +23,10 @@ import type {
   RegisteredTerminal,
   RegisterTerminalRequest,
   RestockRequest,
+  RosterEntry,
+  StaffMember,
+  StaffSessionResponse,
+  StaffSignInRequest,
   StockLevel,
   StockMovement,
   SyncCatalogRequest,
@@ -29,6 +34,7 @@ import type {
   Terminal,
   TicketStatus,
   UpdateProductRequest,
+  UpdateStaffRequest,
   VoidPaymentRequest,
 } from './types';
 
@@ -62,7 +68,7 @@ function get<T>(url: string, o: EndpointOptions): Promise<ApiResult<T>> {
 }
 
 function send<T>(
-  method: 'POST' | 'PUT',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body: unknown,
   o: EndpointOptions,
@@ -82,6 +88,57 @@ export function getMe(apiKey?: string, o: EndpointOptions = {}): Promise<ApiResu
     { ...(apiKey ? { headers: authHeaders(apiKey) } : {}), ...common(o) },
     o.fetchImpl,
   );
+}
+
+// ---------------------------------------------------------------- staff
+
+/** `GET /staff/roster`: who may sign in on this device. */
+export function getRoster(o: EndpointOptions = {}): Promise<ApiResult<RosterEntry[]>> {
+  return get<RosterEntry[]>(`${BASE}/staff/roster`, o);
+}
+
+/** `POST /staff-sessions`: username + PIN → a session token for this device. */
+export function staffSignIn(
+  body: StaffSignInRequest,
+  o: EndpointOptions = {},
+): Promise<ApiResult<StaffSessionResponse>> {
+  return send<StaffSessionResponse>('POST', `${BASE}/staff-sessions`, body, o);
+}
+
+/** `DELETE /staff-sessions/current` (the session in X-Staff-Session). */
+export function staffSignOut(o: EndpointOptions = {}): Promise<ApiResult<void>> {
+  return request<void>(
+    `${BASE}/staff-sessions/current`,
+    { method: 'DELETE', ...common(o) },
+    o.fetchImpl,
+  );
+}
+
+export function listStaff(o: EndpointOptions = {}): Promise<ApiResult<StaffMember[]>> {
+  return get<StaffMember[]>(`${BASE}/staff`, o);
+}
+
+export function createStaff(
+  body: CreateStaffRequest,
+  o: EndpointOptions = {},
+): Promise<ApiResult<StaffMember>> {
+  return send<StaffMember>('POST', `${BASE}/staff`, body, o);
+}
+
+export function updateStaff(
+  id: string,
+  body: UpdateStaffRequest,
+  o: EndpointOptions = {},
+): Promise<ApiResult<StaffMember>> {
+  return send<StaffMember>('PATCH', `${BASE}/staff/${enc(id)}`, body, o);
+}
+
+export function resetStaffPin(
+  id: string,
+  pin: string,
+  o: EndpointOptions = {},
+): Promise<ApiResult<StaffMember>> {
+  return send<StaffMember>('POST', `${BASE}/staff/${enc(id)}/pin`, { pin }, o);
 }
 
 // ---------------------------------------------------------------- orders

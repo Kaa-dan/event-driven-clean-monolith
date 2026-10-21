@@ -22,3 +22,4 @@ are the history of *why*. Template: [`0000-template.md`](0000-template.md).
 | [0014](0014-outbox-dead-letters-and-isolation.md) | Per-destination relay, HQ timeouts, dead letters (amends 0006) | Accepted |
 | [0015](0015-kds-live-stream-by-polling.md) | KDS workflow and SSE stream backed by DB polling | Accepted |
 | [0016](0016-catalog-sync-lww-and-retention.md) | Catalog management, LWW HQ sync, retention | Accepted |
+| [0017](0017-staff-pin-sessions.md) | Staff username + PIN sessions on paired devices | Accepted |

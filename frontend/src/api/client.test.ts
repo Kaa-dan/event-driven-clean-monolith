@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   isNetworkError,
+  onStaffUnauthorized,
   onUnauthorized,
   replayedHeader,
   request,
   setApiKey,
+  setStaffToken,
   toProblem,
 } from './client';
 import { checkout, getMe, listKitchenTickets, listOrders } from './endpoints';
@@ -189,6 +191,46 @@ describe('request', () => {
     off();
     expect(r.status).toBe(401);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes an ended staff session to the staff listeners, and a wrong PIN to nobody', async () => {
+    const device = vi.fn();
+    const staff = vi.fn();
+    const offDevice = onUnauthorized(device);
+    const offStaff = onStaffUnauthorized(staff);
+    await request(
+      '/x',
+      {},
+      vi.fn().mockResolvedValue(json(401, { code: 'STAFF_SESSION_INVALID' })),
+    );
+    await request(
+      '/x',
+      {},
+      vi.fn().mockResolvedValue(json(401, { code: 'STAFF_SESSION_REQUIRED' })),
+    );
+    await request('/x', {}, vi.fn().mockResolvedValue(json(401, { code: 'INVALID_CREDENTIALS' })));
+    offDevice();
+    offStaff();
+    expect(staff).toHaveBeenCalledTimes(2);
+    expect(device).not.toHaveBeenCalled();
+  });
+
+  it('sends the staff session next to the device key', async () => {
+    setApiKey('sf_dev');
+    setStaffToken('ss_person');
+    const f = vi.fn().mockResolvedValue(json(200, {}));
+    await request('/x', {}, f);
+    setStaffToken(null);
+    await request('/x', {}, f);
+    setApiKey(null);
+    const headers = f.mock.calls.map(
+      (c) => (c[1] as RequestInit).headers as Record<string, string>,
+    );
+    expect(headers[0]).toMatchObject({
+      Authorization: 'Bearer sf_dev',
+      'X-Staff-Session': 'ss_person',
+    });
+    expect(headers[1]?.['X-Staff-Session']).toBeUndefined();
   });
 });
 

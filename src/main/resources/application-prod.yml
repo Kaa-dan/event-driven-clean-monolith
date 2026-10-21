@@ -12,6 +12,8 @@ storefront:
     currency: ${STOREFRONT_BRANCH_CURRENCY}
     zone: ${STOREFRONT_BRANCH_ZONE}
     node-id: ${STOREFRONT_NODE_ID}
+  security:
+    require-staff-session: ${STOREFRONT_REQUIRE_STAFF_SESSION:true}   # people sign in on every UI device
 
 logging:
   structured:
